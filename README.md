@@ -296,6 +296,11 @@ to `False`, and `CLUSTER_KEY` to what you wish to use as the cluster name.
 By default, the Snowflake database is set to `PROD`. To override this, set `DATABASE_KEY`
 to `WhateverNameOfYourDb`.
 
+By default, the Snowflake schema is set to `INFORMATION_SCHEMA`. To override this, set `SCHEMA_KEY`
+to `WhateverNameOfYourSchema`. Note that `ACCOUNT_USAGE` is a separate schema
+which allows users to query a wider set of data at the cost of latency.
+Differences are defined [here](https://docs.snowflake.com/en/sql-reference/account-usage.html#differences-between-account-usage-and-information-schema)
+
 The `where_clause_suffix` below should define which schemas you'd like to query (see [the sample dag](https://github.com/amundsen-io/amundsendatabuilder/blob/master/example/scripts/sample_snowflake_data_loader.py) for an example).
 
 The SQL query driving the extraction is defined [here](https://github.com/amundsen-io/amundsendatabuilder/blob/master/databuilder/extractor/snowflake_metadata_extractor.py)
@@ -444,7 +449,7 @@ Other information such as report run, owner, chart name, query name is in separa
 
 It calls two APIs ([spaces API](https://mode.com/developer/api-reference/management/spaces/#listSpaces) and [reports API](https://mode.com/developer/api-reference/analytics/reports/#listReportsInSpace)) joining together.
 
-You can create Databuilder job config like this. 
+You can create Databuilder job config like this.
 ```python
 task = DefaultTask(extractor=ModeDashboardExtractor(),
 				   loader=FsNeo4jCSVLoader(), )
@@ -608,6 +613,25 @@ job = DefaultJob(conf=job_config,
 job.launch()
 ```
 
+If your organization's mode account supports discovery feature(paid feature), you could leverage [ModeDashboardChartsBatchExtractor](./databuilder/extractor/dashboard/mode_analytics/batch/mode_dashboard_charts_batch_extractor.py) which does a batch call to mode API which is more performant. You need to generate a bearer account based on the API instruction.
+
+```python
+extractor = ModeDashboardChartsBatchExtractor()
+task = DefaultTask(extractor=extractor, loader=FsNeo4jCSVLoader())
+
+job_config = ConfigFactory.from_dict({
+	'{}.{}'.format(extractor.get_scope(), ORGANIZATION): organization,
+	'{}.{}'.format(extractor.get_scope(), MODE_ACCESS_TOKEN): mode_token,
+	'{}.{}'.format(extractor.get_scope(), MODE_PASSWORD_TOKEN): mode_password,
+	'{}.{}'.format(extractor.get_scope(), MODE_BEARER_TOKEN): mode_bearer_token,
+})
+
+job = DefaultJob(conf=job_config,
+                 task=task,
+                 publisher=Neo4jCsvPublisher())
+job.launch()
+```
+
 #### [ModeDashboardUserExtractor](./databuilder/extractor/dashboard/mode_analytics/mode_dashboard_user_extractor.py)
 A Extractor that extracts Mode user_id and then update User node.
 
@@ -636,6 +660,7 @@ A Extractor that extracts Mode dashboard's accumulated view count.
 Note that this provides accumulated view count which does [not effectively show relevancy](./docs/dashboard_ingestion_guide.md#21-ingest-dashboard-usage-data-and-decorate-neo4j-over-base-data). Thus, fields from this extractor is not directly compatible with [DashboardUsage](./docs/models.md#dashboardusage) model.
 
 If you are fine with `accumulated usage`, you could use TemplateVariableSubstitutionTransformer to transform Dict payload from [ModeDashboardUsageExtractor](./databuilder/extractor/dashboard/mode_analytics/mode_dashboard_usage_extractor.py) to fit [DashboardUsage](./docs/models.md#dashboardusage) and transform Dict to  [DashboardUsage](./docs/models.md#dashboardusage) by [TemplateVariableSubstitutionTransformer](./databuilder/transformer/template_variable_substitution_transformer.py), and [DictToModel](./databuilder/transformer/dict_to_model.py) transformers. ([Example](./databuilder/extractor/dashboard/mode_analytics/mode_dashboard_queries_extractor.py#L36) on how to combining these two transformers)
+
 
 ### [RedashDashboardExtractor](./databuilder/extractor/dashboard/redash/redash_dashboard_extractor.py)
 
@@ -851,6 +876,29 @@ job = DefaultJob(conf=job_config,
                  publisher=Neo4jCsvPublisher())
 job.launch()
 ```
+
+### [BamboohrUserExtractor](./databuilder/extractor/user/bamboohr/bamboohr_user_extractor.py)
+
+The included `BamboohrUserExtractor` provides support for extracting basic user metadata from [BambooHR](https://www.bamboohr.com/).  For companies and organizations that use BambooHR to store employee information such as email addresses, first names, last names, titles, and departments, use the `BamboohrUserExtractor` to populate Amundsen user data.
+
+A sample job config is shown below.
+
+```python
+extractor = BamboohrUserExtractor()
+task = DefaultTask(extractor=extractor, loader=FsNeo4jCSVLoader())
+
+job_config = ConfigFactory.from_dict({
+    'extractor.bamboohr_user.api_key': api_key,
+    'extractor.bamboohr_user.subdomain': subdomain,
+})
+
+job = DefaultJob(conf=job_config,
+                 task=task,
+                 publisher=Neo4jCsvPublisher())
+job.launch()
+```
+
+
 
 ## List of transformers
 #### [ChainedTransformer](https://github.com/amundsen-io/amundsendatabuilder/blob/master/databuilder/transformer/base_transformer.py#L41 "ChainedTransformer")

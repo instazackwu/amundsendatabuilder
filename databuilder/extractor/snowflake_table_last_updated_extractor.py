@@ -48,7 +48,7 @@ class SnowflakeTableLastUpdatedExtractor(Extractor):
     DEFAULT_CLUSTER_NAME = 'master'
 
     DEFAULT_CONFIG = ConfigFactory.from_dict(
-        {WHERE_CLAUSE_SUFFIX_KEY: ' ',
+        {WHERE_CLAUSE_SUFFIX_KEY: ' WHERE t.last_altered IS NOT NULL ',
          CLUSTER_KEY: DEFAULT_CLUSTER_NAME,
          USE_CATALOG_AS_CLUSTER_NAME: True,
          DATABASE_KEY: 'snowflake',
